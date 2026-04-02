@@ -65,7 +65,7 @@ func main() {
 
 	router := http.NewServeMux()
 
-	router.Handle("GET /auth/", http.StripPrefix("/auth", authRouter))
+	router.Handle("/auth/", http.StripPrefix("/auth", authRouter))
 
 	// Admin-only example: JWT must be valid (Auth) before RequireAdmin loads the user from DB.
 	router.HandleFunc("POST /movies", middleware.Logging(
@@ -85,10 +85,12 @@ func main() {
 
 func SetupDB() (*gorm.DB, error) {
 
+	dbHost := getEnv("MOVIEDB_HOST", "localhost")
 	dbUser := os.Getenv("MOVIEDB_USERNAME")
 	dbPassword := os.Getenv("MOVIEDB_PASSWORD")
+	dbName := getEnv("MOVIEDB_NAME", "MovieTheater")
 
-	dsn := fmt.Sprintf("host=localhost user=%s dbname=MovieTheater password=%s sslmode=disable", dbUser, dbPassword)
+	dsn := fmt.Sprintf("host=%s user=%s dbname=%s password=%s sslmode=disable", dbHost, dbUser, dbName, dbPassword)
 	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
 	if err != nil {
 		return nil, err

@@ -47,13 +47,11 @@ func (h *UsersHandler) LoginHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	defer r.Body.Close()
 
-	userId, username, err := h.UserService.Login(ctx, u)
+	userId, username, isUserAdmin, err := h.UserService.Login(ctx, u)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusUnauthorized)
 		return
 	}
-
-	// TODO: Get IsAdmin field here...
 
 	token, err := middleware.CreateToken(username, userId)
 	if err != nil {
@@ -71,7 +69,7 @@ func (h *UsersHandler) LoginHandler(w http.ResponseWriter, r *http.Request) {
 		Token:    token,
 		UserId:   userId,
 		Username: username,
-		IsAdmin:  false,
+		IsAdmin:  isUserAdmin,
 	}
 
 	utils.WriteJSONResponse(w, http.StatusOK, resp)
@@ -94,13 +92,14 @@ func (h *UsersHandler) RegisterHandler(w http.ResponseWriter, r *http.Request) {
 	userId, err := h.UserService.Register(ctx, u)
 	if err != nil {
 		if errors.Is(err, services.ErrDuplicateUsername) {
-			http.Error(w, fmt.Sprintf("username already exists. %s", err), http.StatusConflict)
-			return
-		} else if errors.Is(err, services.ErrInvalidCredentials) {
-			http.Error(w, fmt.Sprintf("error invalid credentials. %s", err), http.StatusUnauthorized)
+			http.Error(w, "username already exists", http.StatusConflict)
 			return
 		}
-		http.Error(w, fmt.Sprintf("error registering user. %s", err), http.StatusInternalServerError)
+		if errors.Is(err, services.ErrInvalidCredentials) {
+			http.Error(w, services.ErrInvalidCredentials.Error(), http.StatusBadRequest)
+			return
+		}
+		http.Error(w, services.ErrInternalServer.Error(), http.StatusInternalServerError)
 		return
 	}
 

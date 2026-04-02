@@ -11,9 +11,9 @@ type Session struct {
 	gorm.Model
 
 	HallID     uint
-	CinemaHall CinemaHall
+	CinemaHall CinemaHall `gorm:"foreignKey:HallID"`
 	MovieID    uint
-	Movie      Movie
+	Movie      Movie `gorm:"foreignKey:MovieID"`
 
 	Price          float64
 	SeatsAvailable int

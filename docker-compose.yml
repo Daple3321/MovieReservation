@@ -1,0 +1,38 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${MOVIEDB_USERNAME:-movie}
+      POSTGRES_PASSWORD: ${MOVIEDB_PASSWORD:-movie}
+      POSTGRES_DB: ${MOVIEDB_NAME:-MovieTheater}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\" || exit 1"]
+      interval: 3s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  api:
+    build: .
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      SERVERIP: "0.0.0.0"
+      SERVERPORT: "${SERVERPORT:-8080}"
+      MOVIEDB_HOST: db
+      MOVIEDB_USERNAME: ${MOVIEDB_USERNAME:-movie}
+      MOVIEDB_PASSWORD: ${MOVIEDB_PASSWORD:-movie}
+      MOVIEDB_NAME: ${MOVIEDB_NAME:-MovieTheater}
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:-docker-dev-only-change-me}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
+    ports:
+      - "${SERVERPORT:-8080}:${SERVERPORT:-8080}"
+
+volumes:
+  postgres_data:
