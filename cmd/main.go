@@ -58,8 +58,13 @@ func main() {
 	}
 
 	userService := services.NewUserService(db)
+
 	usersHandler := handlers.NewUsersHandler(userService)
 	authRouter := usersHandler.RegisterRoutes()
+
+	movieService := services.NewMovieService(db)
+	movieHandler := handlers.NewMovieHandler(movieService)
+	movieRouter := movieHandler.RegisterRoutes()
 
 	adminMiddleware := middleware.NewAdminMiddleware(userService)
 
@@ -67,12 +72,10 @@ func main() {
 
 	router.Handle("/auth/", http.StripPrefix("/auth", authRouter))
 
-	// Admin-only example: JWT must be valid (Auth) before RequireAdmin loads the user from DB.
-	router.HandleFunc("POST /movies", middleware.Logging(
-		middleware.Auth(adminMiddleware.RequireAdmin(func(w http.ResponseWriter, r *http.Request) {
-			http.Error(w, "movie create not implemented", http.StatusNotImplemented)
-		})),
-	))
+	movieProtected := middleware.Auth(adminMiddleware.RequireAdmin(func(w http.ResponseWriter, r *http.Request) {
+		http.StripPrefix("/movie", movieRouter).ServeHTTP(w, r)
+	}))
+	router.Handle("/movie/", movieProtected)
 
 	serverIP := getEnv("SERVERIP", "0.0.0.0")
 	serverPort := os.Getenv("SERVERPORT")
