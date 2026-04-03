@@ -111,7 +111,18 @@ func (t *TicketHandler) BuyTicket(w http.ResponseWriter, r *http.Request) {
 
 	createdTicket, err := t.TicketService.BuyTicket(ctx, userId, newTicket)
 	if err != nil {
-		http.Error(w, fmt.Sprintf("error buying ticket. %s", err), http.StatusInternalServerError)
+		switch {
+		case errors.Is(err, services.ErrInvalidTicketRequest),
+			errors.Is(err, services.ErrSeatSessionMismatch):
+			http.Error(w, err.Error(), http.StatusBadRequest)
+		case errors.Is(err, services.ErrSessionMismatch),
+			errors.Is(err, services.ErrSeatNotFound):
+			http.Error(w, err.Error(), http.StatusNotFound)
+		case errors.Is(err, services.ErrSeatNotAvailable):
+			http.Error(w, err.Error(), http.StatusConflict)
+		default:
+			http.Error(w, fmt.Sprintf("error buying ticket. %s", err), http.StatusInternalServerError)
+		}
 		return
 	}
 
@@ -139,6 +150,14 @@ func (t *TicketHandler) CancelTicket(w http.ResponseWriter, r *http.Request) {
 
 	err = t.TicketService.CancelTicket(ctx, userId, id)
 	if err != nil {
+		if errors.Is(err, services.ErrTicketNotFound) {
+			http.Error(w, err.Error(), http.StatusNotFound)
+			return
+		}
+		if errors.Is(err, services.ErrSeatNotFound) || errors.Is(err, services.ErrSeatNotAvailable) {
+			http.Error(w, err.Error(), http.StatusConflict)
+			return
+		}
 		http.Error(w, fmt.Sprintf("error canceling ticket. %s", err), http.StatusInternalServerError)
 		return
 	}

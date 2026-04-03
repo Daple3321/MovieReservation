@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/Daple3321/MovieReservation/internal/entity"
 	"github.com/Daple3321/MovieReservation/internal/middleware"
@@ -19,6 +20,50 @@ type SessionHandler struct {
 
 func NewSessionHandler(sessionService *services.SessionService) *SessionHandler {
 	return &SessionHandler{SessionService: sessionService}
+}
+
+type seatPublic struct {
+	ID    uint `json:"id"`
+	X     int  `json:"x"`
+	Y     int  `json:"y"`
+	Taken bool `json:"taken"`
+}
+
+type sessionPublic struct {
+	ID         uint              `json:"id"`
+	CreatedAt  time.Time         `json:"createdAt"`
+	UpdatedAt  time.Time         `json:"updatedAt"`
+	HallID     uint              `json:"hallId"`
+	MovieID    uint              `json:"movieId"`
+	Price      float64           `json:"price"`
+	StartTime  time.Time         `json:"startTime"`
+	Movie      entity.Movie      `json:"movie"`
+	CinemaHall entity.CinemaHall `json:"cinemaHall"`
+	Seats      []seatPublic      `json:"seats"`
+}
+
+func sessionToPublic(s *entity.Session) sessionPublic {
+	seats := make([]seatPublic, 0, len(s.Seats))
+	for _, se := range s.Seats {
+		seats = append(seats, seatPublic{
+			ID:    se.ID,
+			X:     se.X,
+			Y:     se.Y,
+			Taken: se.UserID != nil,
+		})
+	}
+	return sessionPublic{
+		ID:         s.ID,
+		CreatedAt:  s.CreatedAt,
+		UpdatedAt:  s.UpdatedAt,
+		HallID:     s.HallID,
+		MovieID:    s.MovieID,
+		Price:      s.Price,
+		StartTime:  s.StartTime,
+		Movie:      s.Movie,
+		CinemaHall: s.CinemaHall,
+		Seats:      seats,
+	}
 }
 
 func (m *SessionHandler) RegisterRoutes(admin *middleware.AdminMiddleware) *http.ServeMux {
@@ -61,7 +106,7 @@ func (m *SessionHandler) GetSession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	utils.WriteJSONResponse(w, http.StatusOK, session)
+	utils.WriteJSONResponse(w, http.StatusOK, sessionToPublic(session))
 }
 
 func (m *SessionHandler) GetSessionsPaginated(w http.ResponseWriter, r *http.Request) {
@@ -76,13 +121,28 @@ func (m *SessionHandler) GetSessionsPaginated(w http.ResponseWriter, r *http.Req
 		if errors.Is(err, services.ErrNoPageParameter) {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
-		} else {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
 		}
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
 	}
 
-	utils.WriteJSONResponse(w, http.StatusOK, response)
+	sessions, ok := response.Items.([]entity.Session)
+	if !ok {
+		http.Error(w, "internal error: bad session page shape", http.StatusInternalServerError)
+		return
+	}
+	items := make([]sessionPublic, 0, len(sessions))
+	for i := range sessions {
+		items = append(items, sessionToPublic(&sessions[i]))
+	}
+
+	utils.WriteJSONResponse(w, http.StatusOK, entity.PaginatedResponse{
+		Items:      items,
+		Page:       response.Page,
+		Limit:      response.Limit,
+		TotalItems: response.TotalItems,
+		TotalPages: response.TotalPages,
+	})
 }
 
 func (m *SessionHandler) CreateSession(w http.ResponseWriter, r *http.Request) {
@@ -99,6 +159,14 @@ func (m *SessionHandler) CreateSession(w http.ResponseWriter, r *http.Request) {
 
 	createdSession, err := m.SessionService.CreateSession(ctx, newSession)
 	if err != nil {
+		if errors.Is(err, services.ErrSessionMissingRefs) {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		if errors.Is(err, services.ErrHallNotFound) || errors.Is(err, services.ErrMovieNotFound) {
+			http.Error(w, err.Error(), http.StatusNotFound)
+			return
+		}
 		http.Error(w, fmt.Sprintf("error creating session. %s", err), http.StatusInternalServerError)
 		return
 	}
@@ -128,6 +196,18 @@ func (m *SessionHandler) UpdateSession(w http.ResponseWriter, r *http.Request) {
 
 	updatedSession, err := m.SessionService.UpdateSession(ctx, id, changedSession)
 	if err != nil {
+		if errors.Is(err, services.ErrSessionNotFound) {
+			http.Error(w, err.Error(), http.StatusNotFound)
+			return
+		}
+		if errors.Is(err, services.ErrMovieNotFound) {
+			http.Error(w, err.Error(), http.StatusNotFound)
+			return
+		}
+		if errors.Is(err, services.ErrSessionHallImmutable) {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
 		http.Error(w, fmt.Sprintf("error updating session. %s", err), http.StatusInternalServerError)
 		return
 	}
@@ -149,6 +229,10 @@ func (m *SessionHandler) DeleteSession(w http.ResponseWriter, r *http.Request) {
 
 	err = m.SessionService.DeleteSession(ctx, id)
 	if err != nil {
+		if errors.Is(err, services.ErrSessionNotFound) {
+			http.Error(w, err.Error(), http.StatusNotFound)
+			return
+		}
 		http.Error(w, fmt.Sprintf("error deleting session. %s", err), http.StatusInternalServerError)
 		return
 	}

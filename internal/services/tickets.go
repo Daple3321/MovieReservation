@@ -9,9 +9,17 @@ import (
 
 	"github.com/Daple3321/MovieReservation/internal/entity"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
-var ErrTicketNotFound = errors.New("ticket not found")
+var (
+	ErrTicketNotFound       = errors.New("ticket not found")
+	ErrSeatNotFound         = errors.New("seat not found")
+	ErrSeatNotAvailable     = errors.New("seat is not available")
+	ErrSeatSessionMismatch  = errors.New("seat does not belong to this session")
+	ErrSessionMismatch      = errors.New("session not found for this ticket")
+	ErrInvalidTicketRequest = errors.New("session_id and seat_id are required")
+)
 
 type TicketService struct {
 	db *gorm.DB
@@ -50,15 +58,14 @@ func (t *TicketService) GetTicketsPaginated(ctx context.Context, userId uint, pa
 
 	page, err := strconv.Atoi(pageStr)
 	if err != nil || page < 1 {
-		page = 1 // Default to page 1
+		page = 1
 	}
 
 	limit, err := strconv.Atoi(limitStr)
 	if err != nil || limit < 1 {
-		limit = 10 // Default to 10 items per page
+		limit = 10
 	}
 
-	// get movies
 	tickets := []entity.Ticket{}
 	result := t.db.
 		WithContext(ctx).
@@ -70,14 +77,17 @@ func (t *TicketService) GetTicketsPaginated(ctx context.Context, userId uint, pa
 		Find(&tickets)
 
 	if result.Error != nil {
-		if errors.Is(result.Error, gorm.ErrRecordNotFound) {
-			return nil, ErrTicketNotFound
-		}
 		return nil, result.Error
 	}
 
 	var totalItems int64
-	t.db.WithContext(ctx).Model(&entity.Ticket{}).Count(&totalItems)
+	if err := t.db.WithContext(ctx).
+		Model(&entity.Ticket{}).
+		Where("user_id = ?", userId).
+		Count(&totalItems).Error; err != nil {
+		return nil, err
+	}
+
 	totalPages := (int(totalItems) + limit - 1) / limit
 
 	response := entity.PaginatedResponse{
@@ -91,7 +101,11 @@ func (t *TicketService) GetTicketsPaginated(ctx context.Context, userId uint, pa
 	return &response, nil
 }
 
-func (t *TicketService) BuyTicket(ctx context.Context, userId uint, ticket entity.Ticket) (*entity.Ticket, error) {
+func (t *TicketService) BuyTicket(ctx context.Context, userId uint, in entity.Ticket) (*entity.Ticket, error) {
+	if in.SessionID == 0 || in.SeatID == 0 {
+		return nil, ErrInvalidTicketRequest
+	}
+
 	tx := t.db.WithContext(ctx).Begin()
 	if tx.Error != nil {
 		slog.Error("ticket buy: begin tx", "err", tx.Error)
@@ -99,11 +113,48 @@ func (t *TicketService) BuyTicket(ctx context.Context, userId uint, ticket entit
 	}
 	defer tx.Rollback()
 
-	ticket.UserID = userId
-	ticket.PurchasePrice = ticket.Session.Price
+	var session entity.Session
+	if err := tx.First(&session, in.SessionID).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, ErrSessionMismatch
+		}
+		slog.Error("ticket buy: load session", "err", err)
+		return nil, ErrInternalServer
+	}
 
-	if err := tx.Create(&ticket).Error; err != nil {
-		slog.Error("ticket buy: insert", "err", err)
+	var seat entity.Seat
+	if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&seat, in.SeatID).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, ErrSeatNotFound
+		}
+		slog.Error("ticket buy: load seat", "err", err)
+		return nil, ErrInternalServer
+	}
+
+	if seat.SessionID != in.SessionID {
+		return nil, ErrSeatSessionMismatch
+	}
+
+	if seat.UserID != nil {
+		return nil, ErrSeatNotAvailable
+	}
+
+	uid := userId
+	seat.UserID = &uid
+	if err := tx.Save(&seat).Error; err != nil {
+		slog.Error("ticket buy: assign seat", "err", err)
+		return nil, ErrInternalServer
+	}
+
+	newTicket := entity.Ticket{
+		SessionID:     in.SessionID,
+		SeatID:        in.SeatID,
+		UserID:        userId,
+		PurchasePrice: session.Price,
+	}
+
+	if err := tx.Create(&newTicket).Error; err != nil {
+		slog.Error("ticket buy: insert ticket", "err", err)
 		return nil, ErrInternalServer
 	}
 
@@ -112,7 +163,14 @@ func (t *TicketService) BuyTicket(ctx context.Context, userId uint, ticket entit
 		return nil, ErrInternalServer
 	}
 
-	return &ticket, nil
+	if err := t.db.WithContext(ctx).
+		Preload("Session").
+		Preload("Seat").
+		First(&newTicket, newTicket.ID).Error; err != nil {
+		return nil, err
+	}
+
+	return &newTicket, nil
 }
 
 func (t *TicketService) CancelTicket(ctx context.Context, userId uint, ticketId uint) error {
@@ -123,44 +181,33 @@ func (t *TicketService) CancelTicket(ctx context.Context, userId uint, ticketId 
 	}
 	defer tx.Rollback()
 
-	// check if ticket exists
 	ticket := entity.Ticket{}
-	result := tx.
-		WithContext(ctx).
-		Where("user_id = ?", userId).
-		Where("id = ?", ticketId).
-		First(&ticket)
-	if result.Error != nil {
-		if errors.Is(result.Error, gorm.ErrRecordNotFound) {
+	if err := tx.Where("user_id = ?", userId).Where("id = ?", ticketId).First(&ticket).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return ErrTicketNotFound
 		}
-		return result.Error
+		return err
 	}
 
-	// delete ticket
-	if err := tx.Delete(&entity.Ticket{}, ticketId).Error; err != nil {
-		slog.Error("ticket cancel: insert", "err", err)
+	var seat entity.Seat
+	if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&seat, ticket.SeatID).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return ErrSeatNotFound
+		}
+		return err
+	}
+
+	if seat.UserID == nil || *seat.UserID != userId {
+		return ErrSeatNotAvailable
+	}
+
+	if err := tx.Model(&entity.Seat{}).Where("id = ?", ticket.SeatID).Update("user_id", nil).Error; err != nil {
+		slog.Error("ticket cancel: clear seat", "err", err)
 		return ErrInternalServer
 	}
 
-	// cancel reservation in seat
-	seat := entity.Seat{}
-	result = tx.
-		WithContext(ctx).
-		Where("user_id = ?", userId).
-		Where("id = ?", ticket.SeatID).
-		First(&seat)
-	if result.Error != nil {
-		if errors.Is(result.Error, gorm.ErrRecordNotFound) {
-			return ErrTicketNotFound
-		}
-		return result.Error
-	}
-
-	seat.UserID = 0
-
-	if err := tx.Save(&seat).Error; err != nil {
-		slog.Error("ticket cancel: save seat", "err", err)
+	if err := tx.Delete(&entity.Ticket{}, ticketId).Error; err != nil {
+		slog.Error("ticket cancel: delete ticket", "err", err)
 		return ErrInternalServer
 	}
 

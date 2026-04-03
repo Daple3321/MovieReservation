@@ -14,6 +14,8 @@ import (
 var ErrSessionNotFound = errors.New("session not found")
 var ErrHallNotFound = errors.New("hall not found")
 var ErrMovieNotFound = errors.New("movie not found")
+var ErrSessionHallImmutable = errors.New("session hall cannot be changed after creation; delete and recreate the session")
+var ErrSessionMissingRefs = errors.New("hall_id and movie_id are required")
 
 type SessionService struct {
 	db *gorm.DB
@@ -26,15 +28,11 @@ func NewSessionService(db *gorm.DB) *SessionService {
 func (s *SessionService) GetSession(ctx context.Context, sessionID uint) (*entity.Session, error) {
 	var session entity.Session
 
-	// BUG: This whole thing is given to a user.
-	// User can see all tickets and seats.
-	// get session with movie, cinema hall, seats, and tickets
 	result := s.db.
 		WithContext(ctx).
 		Preload("Movie").
 		Preload("CinemaHall").
 		Preload("Seats").
-		Preload("Tickets").
 		First(&session, sessionID)
 
 	if result.Error != nil {
@@ -64,9 +62,6 @@ func (s *SessionService) GetSessionsPaginated(ctx context.Context, pageStr strin
 		limit = 10 // Default to 10 items per page
 	}
 
-	// BUG: This whole thing is given to a user.
-	// User can see all tickets and seats.
-	// get sessions
 	sessions := []entity.Session{}
 	result := s.db.
 		WithContext(ctx).
@@ -75,13 +70,9 @@ func (s *SessionService) GetSessionsPaginated(ctx context.Context, pageStr strin
 		Preload("Movie").
 		Preload("CinemaHall").
 		Preload("Seats").
-		Preload("Tickets").
 		Find(&sessions)
 
 	if result.Error != nil {
-		if errors.Is(result.Error, gorm.ErrRecordNotFound) {
-			return nil, ErrSessionNotFound
-		}
 		return nil, result.Error
 	}
 
@@ -101,6 +92,10 @@ func (s *SessionService) GetSessionsPaginated(ctx context.Context, pageStr strin
 }
 
 func (s *SessionService) CreateSession(ctx context.Context, session entity.Session) (*entity.Session, error) {
+	if session.HallID == 0 || session.MovieID == 0 {
+		return nil, ErrSessionMissingRefs
+	}
+
 	tx := s.db.WithContext(ctx).Begin()
 	if tx.Error != nil {
 		slog.Error("session create: begin tx", "err", tx.Error)
@@ -108,20 +103,21 @@ func (s *SessionService) CreateSession(ctx context.Context, session entity.Sessi
 	}
 	defer tx.Rollback()
 
-	// validate hall exists
 	hall := entity.CinemaHall{}
-	result := tx.First(&hall, session.HallID)
-	if result.Error != nil {
-		slog.Error("session create: hall not found", "err", result.Error)
-		return nil, ErrHallNotFound
+	if err := tx.First(&hall, session.HallID).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, ErrHallNotFound
+		}
+		slog.Error("session create: load hall", "err", err)
+		return nil, ErrInternalServer
 	}
 
-	// validate movie exists
-	movie := entity.Movie{}
-	result = tx.First(&movie, session.MovieID)
-	if result.Error != nil {
-		slog.Error("session create: movie not found", "err", result.Error)
-		return nil, ErrMovieNotFound
+	if err := tx.First(&entity.Movie{}, session.MovieID).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, ErrMovieNotFound
+		}
+		slog.Error("session create: load movie", "err", err)
+		return nil, ErrInternalServer
 	}
 
 	// create session
@@ -153,10 +149,19 @@ func (s *SessionService) CreateSession(ctx context.Context, session entity.Sessi
 		return nil, ErrInternalServer
 	}
 
-	return &session, nil
+	var out entity.Session
+	if err := s.db.WithContext(ctx).
+		Preload("Movie").
+		Preload("CinemaHall").
+		Preload("Seats").
+		First(&out, session.ID).Error; err != nil {
+		return nil, err
+	}
+
+	return &out, nil
 }
 
-func (s *SessionService) UpdateSession(ctx context.Context, sessionID uint, session entity.Session) (*entity.Session, error) {
+func (s *SessionService) UpdateSession(ctx context.Context, sessionID uint, changed entity.Session) (*entity.Session, error) {
 	tx := s.db.WithContext(ctx).Begin()
 	if tx.Error != nil {
 		slog.Error("session update: begin tx", "err", tx.Error)
@@ -164,33 +169,35 @@ func (s *SessionService) UpdateSession(ctx context.Context, sessionID uint, sess
 	}
 	defer tx.Rollback()
 
-	// validate session exists
 	sessionToUpdate := entity.Session{}
-	result := tx.First(&sessionToUpdate, sessionID)
-	if result.Error != nil {
-		slog.Error("session update: session not found", "err", result.Error)
-		return nil, ErrSessionNotFound
+	if err := tx.First(&sessionToUpdate, sessionID).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, ErrSessionNotFound
+		}
+		slog.Error("session update: load session", "err", err)
+		return nil, ErrInternalServer
 	}
 
-	// validate hall exists
-	hall := entity.CinemaHall{}
-	result = tx.First(&hall, sessionToUpdate.HallID)
-	if result.Error != nil {
-		slog.Error("session update: hall not found", "err", result.Error)
-		return nil, ErrHallNotFound
+	if changed.HallID != 0 && changed.HallID != sessionToUpdate.HallID {
+		return nil, ErrSessionHallImmutable
 	}
 
-	// validate movie exists
-	movie := entity.Movie{}
-	result = tx.First(&movie, sessionToUpdate.MovieID)
-	if result.Error != nil {
-		slog.Error("session update: movie not found", "err", result.Error)
-		return nil, ErrMovieNotFound
+	if changed.MovieID != 0 && changed.MovieID != sessionToUpdate.MovieID {
+		if err := tx.First(&entity.Movie{}, changed.MovieID).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return nil, ErrMovieNotFound
+			}
+			slog.Error("session update: validate movie", "err", err)
+			return nil, ErrInternalServer
+		}
+		sessionToUpdate.MovieID = changed.MovieID
 	}
 
-	// update session
+	sessionToUpdate.Price = changed.Price
+	sessionToUpdate.StartTime = changed.StartTime
+
 	if err := tx.Save(&sessionToUpdate).Error; err != nil {
-		slog.Error("session update: insert", "err", err)
+		slog.Error("session update: save", "err", err)
 		return nil, ErrInternalServer
 	}
 
@@ -199,7 +206,16 @@ func (s *SessionService) UpdateSession(ctx context.Context, sessionID uint, sess
 		return nil, ErrInternalServer
 	}
 
-	return &sessionToUpdate, nil
+	var out entity.Session
+	if err := s.db.WithContext(ctx).
+		Preload("Movie").
+		Preload("CinemaHall").
+		Preload("Seats").
+		First(&out, sessionID).Error; err != nil {
+		return nil, err
+	}
+
+	return &out, nil
 }
 
 func (s *SessionService) DeleteSession(ctx context.Context, sessionID uint) error {
@@ -210,8 +226,24 @@ func (s *SessionService) DeleteSession(ctx context.Context, sessionID uint) erro
 	}
 	defer tx.Rollback()
 
+	if err := tx.First(&entity.Session{}, sessionID).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return ErrSessionNotFound
+		}
+		slog.Error("session delete: load session", "err", err)
+		return ErrInternalServer
+	}
+
+	if err := tx.Where("session_id = ?", sessionID).Delete(&entity.Ticket{}).Error; err != nil {
+		slog.Error("session delete: tickets", "err", err)
+		return ErrInternalServer
+	}
+	if err := tx.Where("session_id = ?", sessionID).Delete(&entity.Seat{}).Error; err != nil {
+		slog.Error("session delete: seats", "err", err)
+		return ErrInternalServer
+	}
 	if err := tx.Delete(&entity.Session{}, sessionID).Error; err != nil {
-		slog.Error("session delete: insert", "err", err)
+		slog.Error("session delete: session", "err", err)
 		return ErrInternalServer
 	}
 

@@ -1,0 +1,506 @@
+openapi: 3.0.0
+info:
+  title: MovieTheater
+  version: 1.0.0
+paths:
+  /auth/login:
+    post:
+      summary: Login
+      operationId: c_users_daple_documents_bruno_moviereservation_auth_login_yml
+      description: ''
+      tags:
+        - Auth
+      responses:
+        '200':
+          description: ''
+      requestBody:
+        $ref: '#/components/requestBodies/login'
+      servers:
+        - url: http://localhost:8080
+  /auth/register:
+    post:
+      summary: Register
+      operationId: c_users_daple_documents_bruno_moviereservation_auth_register_yml
+      description: ''
+      tags:
+        - Auth
+      responses:
+        '200':
+          description: ''
+      requestBody:
+        $ref: '#/components/requestBodies/register'
+      servers:
+        - url: http://localhost:8080
+  /movie/:
+    post:
+      summary: Create_Movie
+      operationId: c_users_daple_documents_bruno_moviereservation_movies_create_movie_yml
+      description: ''
+      tags:
+        - Movies
+      responses:
+        '200':
+          description: ''
+      requestBody:
+        $ref: '#/components/requestBodies/create_movie'
+      servers:
+        - url: http://localhost:8080
+    put:
+      summary: Update movie
+      operationId: c_users_daple_documents_bruno_moviereservation_movies_update_movie_yml
+      description: ''
+      tags:
+        - Movies
+      responses:
+        '200':
+          description: ''
+      requestBody:
+        $ref: '#/components/requestBodies/update_movie'
+      servers:
+        - url: http://localhost:8080
+    get:
+      summary: Get Movies
+      operationId: c_users_daple_documents_bruno_moviereservation_movies_get_movies_yml
+      description: ''
+      tags:
+        - Movies
+      responses:
+        '200':
+          description: ''
+      parameters:
+        - name: page
+          in: query
+          description: ''
+          required: true
+          schema:
+            type: integer
+            format: int32
+          example: '1'
+        - name: limit
+          in: query
+          description: ''
+          required: true
+          schema:
+            type: integer
+            format: int32
+          example: '10'
+      servers:
+        - url: http://localhost:8080
+  /movie/2:
+    delete:
+      summary: Delete movie
+      operationId: c_users_daple_documents_bruno_moviereservation_movies_delete_movie_yml
+      description: ''
+      tags:
+        - Movies
+      responses:
+        '200':
+          description: ''
+      servers:
+        - url: http://localhost:8080
+  /movie/3:
+    get:
+      summary: Get Movie
+      operationId: c_users_daple_documents_bruno_moviereservation_movies_get_movie_yml
+      description: ''
+      tags:
+        - Movies
+      responses:
+        '200':
+          description: ''
+      servers:
+        - url: http://localhost:8080
+  /hall/:
+    post:
+      summary: Create Hall
+      operationId: c_users_daple_documents_bruno_moviereservation_halls_create_hall_yml
+      description: ''
+      tags:
+        - Halls
+      responses:
+        '200':
+          description: ''
+      requestBody:
+        $ref: '#/components/requestBodies/create_hall'
+      servers:
+        - url: http://localhost:8080
+    get:
+      summary: Get Halls
+      operationId: c_users_daple_documents_bruno_moviereservation_halls_get_halls_yml
+      description: ''
+      tags:
+        - Halls
+      responses:
+        '200':
+          description: ''
+      parameters:
+        - name: page
+          in: query
+          description: ''
+          required: true
+          schema:
+            type: integer
+            format: int32
+          example: '1'
+        - name: limit
+          in: query
+          description: ''
+          required: true
+          schema:
+            type: integer
+            format: int32
+          example: '10'
+      servers:
+        - url: http://localhost:8080
+  /hall/2:
+    put:
+      summary: Update Hall
+      operationId: c_users_daple_documents_bruno_moviereservation_halls_update_hall_yml
+      description: ''
+      tags:
+        - Halls
+      responses:
+        '200':
+          description: ''
+      requestBody:
+        $ref: '#/components/requestBodies/update_hall'
+      servers:
+        - url: http://localhost:8080
+  /hall/1:
+    delete:
+      summary: Delete Hall
+      operationId: c_users_daple_documents_bruno_moviereservation_halls_delete_hall_yml
+      description: ''
+      tags:
+        - Halls
+      responses:
+        '200':
+          description: ''
+      servers:
+        - url: http://localhost:8080
+    get:
+      summary: Get Hall
+      operationId: c_users_daple_documents_bruno_moviereservation_halls_get_hall_yml
+      description: ''
+      tags:
+        - Halls
+      responses:
+        '200':
+          description: ''
+      servers:
+        - url: http://localhost:8080
+  /session/:
+    post:
+      summary: Create Session
+      operationId: >-
+        c_users_daple_documents_bruno_moviereservation_sessions_create_session_yml
+      description: ''
+      tags:
+        - Sessions
+      responses:
+        '200':
+          description: ''
+      requestBody:
+        $ref: '#/components/requestBodies/create_session'
+      servers:
+        - url: http://localhost:8080
+    get:
+      summary: Get Sessions
+      operationId: c_users_daple_documents_bruno_moviereservation_sessions_get_sessions_yml
+      description: ''
+      tags:
+        - Sessions
+      responses:
+        '200':
+          description: ''
+      parameters:
+        - name: page
+          in: query
+          description: ''
+          required: true
+          schema:
+            type: integer
+            format: int32
+          example: '1'
+        - name: limit
+          in: query
+          description: ''
+          required: true
+          schema:
+            type: integer
+            format: int32
+          example: '10'
+      servers:
+        - url: http://localhost:8080
+  /session/1:
+    get:
+      summary: Get Session
+      operationId: c_users_daple_documents_bruno_moviereservation_sessions_get_session_yml
+      description: ''
+      tags:
+        - Sessions
+      responses:
+        '200':
+          description: ''
+      servers:
+        - url: http://localhost:8080
+    delete:
+      summary: Delete session
+      operationId: >-
+        c_users_daple_documents_bruno_moviereservation_sessions_delete_session_yml
+      description: ''
+      tags:
+        - Sessions
+      responses:
+        '200':
+          description: ''
+      servers:
+        - url: http://localhost:8080
+  /ticket/:
+    post:
+      summary: Buy Ticket
+      operationId: c_users_daple_documents_bruno_moviereservation_tickets_buy_ticket_yml
+      description: ''
+      tags:
+        - Tickets
+      responses:
+        '200':
+          description: ''
+      requestBody:
+        $ref: '#/components/requestBodies/buy_ticket'
+      servers:
+        - url: http://localhost:8080
+    get:
+      summary: Get Tickets
+      operationId: c_users_daple_documents_bruno_moviereservation_tickets_get_tickets_yml
+      description: ''
+      tags:
+        - Tickets
+      responses:
+        '200':
+          description: ''
+      parameters:
+        - name: page
+          in: query
+          description: ''
+          required: true
+          schema:
+            type: integer
+            format: int32
+          example: '1'
+        - name: limit
+          in: query
+          description: ''
+          required: true
+          schema:
+            type: integer
+            format: int32
+          example: '10'
+      servers:
+        - url: http://localhost:8080
+  /ticket/1:
+    delete:
+      summary: Cancel Ticket
+      operationId: c_users_daple_documents_bruno_moviereservation_tickets_cancel_ticket_yml
+      description: ''
+      tags:
+        - Tickets
+      responses:
+        '200':
+          description: ''
+      servers:
+        - url: http://localhost:8080
+  /ticket/2:
+    get:
+      summary: Get Ticket
+      operationId: c_users_daple_documents_bruno_moviereservation_tickets_get_ticket_yml
+      description: ''
+      tags:
+        - Tickets
+      responses:
+        '200':
+          description: ''
+      servers:
+        - url: http://localhost:8080
+servers: []
+components:
+  schemas:
+    login:
+      type: object
+      properties:
+        username:
+          type: string
+        password:
+          type: string
+      example:
+        username: daple
+        password: '3321'
+    register:
+      type: object
+      properties:
+        username:
+          type: string
+        password:
+          type: string
+      example:
+        username: daple
+        password: '3321'
+    create_movie:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        duration:
+          type: integer
+      example:
+        name: New movie
+        description: some desc
+        duration: 130
+    update_movie:
+      type: object
+      properties:
+        ID:
+          type: integer
+        CreatedAt:
+          type: string
+        UpdatedAt:
+          type: string
+        DeletedAt:
+          type: string
+          nullable: true
+        name:
+          type: string
+        description:
+          type: string
+        release_date:
+          type: string
+        duration:
+          type: integer
+        Sessions:
+          type: array
+          items:
+            type: string
+        Users:
+          type: array
+          items:
+            type: string
+      example:
+        ID: 3
+        CreatedAt: '2026-04-02T20:48:02.451962Z'
+        UpdatedAt: '2026-04-02T20:48:02.451962Z'
+        DeletedAt: null
+        name: Some Movie 3 UPDATED!!
+        description: some desc UPDATED!!
+        release_date: '2026-04-02T20:48:02.451037Z'
+        duration: 130
+        Sessions: []
+        Users: []
+    create_hall:
+      type: object
+      properties:
+        Width:
+          type: integer
+        Height:
+          type: integer
+      example:
+        Width: 5
+        Height: 5
+    update_hall:
+      type: object
+      properties:
+        Width:
+          type: integer
+        Height:
+          type: integer
+      example:
+        Width: 5
+        Height: 5
+    create_session:
+      type: object
+      properties:
+        HallID:
+          type: integer
+        MovieID:
+          type: integer
+        Price:
+          type: integer
+      example:
+        HallID: 2
+        MovieID: 2
+        Price: 5
+    buy_ticket:
+      type: object
+      properties:
+        SessionID:
+          type: integer
+        SeatID:
+          type: integer
+        UserID:
+          type: integer
+        PurchasePrice:
+          type: integer
+      example:
+        SessionID: 1
+        SeatID: 1
+        UserID: 1
+        PurchasePrice: 5
+  requestBodies:
+    login:
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/login'
+      description: ''
+      required: true
+    register:
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/register'
+      description: ''
+      required: true
+    create_movie:
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/create_movie'
+      description: ''
+      required: true
+    update_movie:
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/update_movie'
+      description: ''
+      required: true
+    create_hall:
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/create_hall'
+      description: ''
+      required: true
+    update_hall:
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/update_hall'
+      description: ''
+      required: true
+    create_session:
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/create_session'
+      description: ''
+      required: true
+    buy_ticket:
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/buy_ticket'
+      description: ''
+      required: true
+  securitySchemes: {}
