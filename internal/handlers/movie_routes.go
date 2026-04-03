@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -21,13 +22,19 @@ func NewMovieHandler(movieService *services.MovieService) *MovieHandler {
 	return &MovieHandler{MovieService: movieService}
 }
 
-func (m *MovieHandler) RegisterRoutes() *http.ServeMux {
+func (m *MovieHandler) RegisterRoutes(admin *middleware.AdminMiddleware) *http.ServeMux {
 	r := http.NewServeMux()
 
-	r.HandleFunc("GET /{id}", middleware.Logging((m.GetMovie)))
-	r.HandleFunc("POST /", middleware.Logging((m.CreateMovie)))
-	r.HandleFunc("PUT /", middleware.Logging((m.UpdateMovie)))
-	r.HandleFunc("DELETE /{id}", middleware.Logging((m.DeleteMovie)))
+	r.HandleFunc("GET /{id}", middleware.Logging(m.GetMovie))
+	r.HandleFunc("GET /", middleware.Logging(m.GetMoviesPaginated))
+
+	withAdmin := func(next http.HandlerFunc) http.HandlerFunc {
+		return middleware.Auth(admin.RequireAdmin(next))
+	}
+
+	r.HandleFunc("POST /", middleware.Logging(withAdmin(m.CreateMovie)))
+	r.HandleFunc("PUT /", middleware.Logging(withAdmin(m.UpdateMovie)))
+	r.HandleFunc("DELETE /{id}", middleware.Logging(withAdmin(m.DeleteMovie)))
 
 	return r
 }
@@ -48,6 +55,26 @@ func (m *MovieHandler) GetMovie(w http.ResponseWriter, r *http.Request) {
 	movie, err := m.MovieService.GetMovie(ctx, id)
 
 	utils.WriteJSONResponse(w, http.StatusOK, movie)
+}
+
+func (m *MovieHandler) GetMoviesPaginated(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := context.WithTimeout(r.Context(), RequestTimeout)
+	defer cancel()
+
+	pageStr := r.URL.Query().Get("page")
+	limitStr := r.URL.Query().Get("limit")
+
+	response, err := m.MovieService.GetMoviesPaginated(ctx, pageStr, limitStr)
+	if err != nil {
+		if errors.Is(err, services.ErrNoPageParameter) {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+		} else {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
+		return
+	}
+
+	utils.WriteJSONResponse(w, http.StatusOK, response)
 }
 
 func (m *MovieHandler) CreateMovie(w http.ResponseWriter, r *http.Request) {

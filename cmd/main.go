@@ -64,18 +64,14 @@ func main() {
 
 	movieService := services.NewMovieService(db)
 	movieHandler := handlers.NewMovieHandler(movieService)
-	movieRouter := movieHandler.RegisterRoutes()
 
 	adminMiddleware := middleware.NewAdminMiddleware(userService)
+	movieRouter := movieHandler.RegisterRoutes(adminMiddleware)
 
 	router := http.NewServeMux()
 
 	router.Handle("/auth/", http.StripPrefix("/auth", authRouter))
-
-	movieProtected := middleware.Auth(adminMiddleware.RequireAdmin(func(w http.ResponseWriter, r *http.Request) {
-		http.StripPrefix("/movie", movieRouter).ServeHTTP(w, r)
-	}))
-	router.Handle("/movie/", movieProtected)
+	router.Handle("/movie/", http.StripPrefix("/movie", movieRouter))
 
 	serverIP := getEnv("SERVERIP", "0.0.0.0")
 	serverPort := os.Getenv("SERVERPORT")
