@@ -62,7 +62,7 @@ func (m *MovieService) GetMoviesPaginated(ctx context.Context, pageStr string, l
 	result := m.db.
 		WithContext(ctx).
 		Limit(limit).
-		Offset(page).
+		Offset((page - 1) * limit).
 		Preload("Sessions").
 		Preload("Users").
 		Find(&movies)
@@ -74,8 +74,9 @@ func (m *MovieService) GetMoviesPaginated(ctx context.Context, pageStr string, l
 		return nil, result.Error
 	}
 
-	totalItems := int(result.RowsAffected)
-	totalPages := (totalItems + limit - 1) / limit
+	var totalItems int64
+	m.db.WithContext(ctx).Model(&entity.Movie{}).Count(&totalItems)
+	totalPages := (int(totalItems) + limit - 1) / limit
 
 	// response := struct {
 	// 	Items      []entity.Movie
@@ -95,7 +96,7 @@ func (m *MovieService) GetMoviesPaginated(ctx context.Context, pageStr string, l
 		Items:      movies,
 		Page:       page,
 		Limit:      limit,
-		TotalItems: totalItems,
+		TotalItems: int(totalItems),
 		TotalPages: totalPages,
 	}
 

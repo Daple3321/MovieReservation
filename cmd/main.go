@@ -50,6 +50,7 @@ func main() {
 		&entity.User{},
 		&entity.CinemaHall{},
 		&entity.Session{},
+		&entity.Seat{},
 		&entity.Ticket{},
 	)
 	if err != nil {
@@ -68,10 +69,25 @@ func main() {
 	adminMiddleware := middleware.NewAdminMiddleware(userService)
 	movieRouter := movieHandler.RegisterRoutes(adminMiddleware)
 
+	sessionService := services.NewSessionService(db)
+	sessionHandler := handlers.NewSessionHandler(sessionService)
+	sessionRouter := sessionHandler.RegisterRoutes(adminMiddleware)
+
+	hallService := services.NewHallService(db)
+	hallHandler := handlers.NewHallHandler(hallService)
+	hallRouter := hallHandler.RegisterRoutes(adminMiddleware)
+
+	ticketService := services.NewTicketService(db)
+	ticketHandler := handlers.NewTicketHandler(ticketService)
+	ticketRouter := ticketHandler.RegisterRoutes()
+
 	router := http.NewServeMux()
 
 	router.Handle("/auth/", http.StripPrefix("/auth", authRouter))
 	router.Handle("/movie/", http.StripPrefix("/movie", movieRouter))
+	router.Handle("/session/", http.StripPrefix("/session", sessionRouter))
+	router.Handle("/hall/", http.StripPrefix("/hall", hallRouter))
+	router.Handle("/ticket/", http.StripPrefix("/ticket", ticketRouter))
 
 	serverIP := getEnv("SERVERIP", "0.0.0.0")
 	serverPort := os.Getenv("SERVERPORT")
@@ -106,6 +122,7 @@ func ValidateEnvVars() error {
 		"MOVIEDB_PASSWORD",
 		"JWT_SECRET_KEY",
 		"LOG_LEVEL",
+		"ADMIN_USERNAME",
 	}
 
 	for _, v := range vars {
